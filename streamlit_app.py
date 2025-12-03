@@ -1,62 +1,105 @@
 import streamlit as st
+import seaborn as sns
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+import matplotlib.pyplot as plt
 
-st.title('Machine Learning App')
+st.title("🐧 Penguin Species Classifier")
+st.write("A simple machine learning web app using Streamlit & Seaborn Penguins Dataset.")
 
-st.info('This is a Machine Learning App!')
+# Load dataset
+penguins = sns.load_dataset("penguins")
+penguins = penguins.dropna()
 
-with st.expander('Data'):
-  st.write('**Raw Data**')
-  df = pd.read_csv('https://raw.githubusercontent.com/dataprofessor/data/refs/heads/master/penguins_cleaned.csv')
-  df
+# Encode categorical columns
+le_species = LabelEncoder()
+penguins["species_encoded"] = le_species.fit_transform(penguins["species"])
 
-  st.write('**X**')
-  X = df.drop('species', axis=1)
-  X
+le_island = LabelEncoder()
+penguins["island_encoded"] = le_island.fit_transform(penguins["island"])
 
-  st.write('**y**')
-  y = df.species
-  y
+le_sex = LabelEncoder()
+penguins["sex_encoded"] = le_sex.fit_transform(penguins["sex"])
 
-with st.expander('Data Visualization'):
-  st.scatter_chart(data=df, x='bill_length_mm', y='body_mass_g', color='species')
+penguins.drop(['species','island','sex'],axis=1, inplace=True)
 
-#Data Preparation
-with st.sidebar:
-  st.header('Input Features')
-  #"bill_length_mm","bill_depth_mm","flipper_length_mm","body_mass_g"
-  
-  island = st.selectbox('Island',('Biscoe','Dream','Torgersen'))
-  
-  bill_length_mm = st.slider('Bill length (mm)', 32.1, 59.6, 43.9)
-  bill_depth_mm = st.slider('Bill depth (mm)', 13.1, 21.5, 17.2)
-  flipper_length_mm = st.slider('Flipper length (mm)', 172.0, 231.0, 201.0)
-  body_mass_g = st.slider('Body mass (g)', 2700.0, 6300.0, 4207.0)
-  gender = st.selectbox('Gender', ('male','female'))
-  
-  #create a dataframe for input features
-  data = {'island': island,
-          'bill_length_mm': bill_length_mm,
-          'bill_depth_mm': bill_depth_mm,
-          'flipper_length_mm': flipper_length_mm,
-          'body_mass_g': body_mass_g,
-          'sex': gender}
-  input_df = pd.DataFrame(data, index=[0])
-  input_penguins = pd.concat([input_df, X], axis=0)
+# Features & target
+X = penguins[["bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g", 
+              "island_encoded", "sex_encoded"]]
+y = penguins["species_encoded"]
 
-#Encode
-  encode = ['island','sex']
-  df_penguins = pd.get_dummies(input_penguins, prefix=encode)
-  input_row = df_penguins[:1]
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-with st.expander('Input features'):
-  st.write('**Input Penguins**')
-  input_df
-  st.write('**Combine Penguins Data**')
-  input_penguins
-  st.write('Encode input penguins')
-  input_row
+# Model
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
 
+st.sidebar.header("Input Features")
+bill_length = st.sidebar.slider("Bill Length (mm)", 32.0, 60.0, 43.0)
+bill_depth = st.sidebar.slider("Bill Depth (mm)", 13.0, 22.0, 17.0)
+flipper_length = st.sidebar.slider("Flipper Length (mm)", 170, 240, 200)
+body_mass = st.sidebar.slider("Body Mass (g)", 2500, 6500, 4200)
 
+island = st.sidebar.selectbox("Island", le_island.classes_)
+sex = st.sidebar.selectbox("Sex", le_sex.classes_)
+
+# Convert to numeric encoded values
+input_data = pd.DataFrame({
+    "bill_length_mm": [bill_length],
+    "bill_depth_mm": [bill_depth],
+    "flipper_length_mm": [flipper_length],
+    "body_mass_g": [body_mass],
+    "island_encoded": [le_island.transform([island])[0]],
+    "sex_encoded": [le_sex.transform([sex])[0]]
+})
+
+# Predict
+prediction = model.predict(input_data)[0]
+prediction_label = le_species.inverse_transform([prediction])[0]
+prob = model.predict_proba(input_data).max()
+
+st.subheader("🔮 Prediction Result")
+st.write(f"**Predicted Species:** {prediction_label}")
+st.write(f"**Confidence:** {prob:.2f}")
 
 
+st.header("📊 Data Visualization")
+
+# ====== 1. Correlation Heatmap ======
+st.subheader("🔎 Correlation Heatmap")
+fig, ax = plt.subplots(figsize=(8, 4))
+sns.heatmap(penguins.corr(), annot=True, cmap="coolwarm", ax=ax)
+st.pyplot(fig)
+
+# ====== 2. Scatter Plot Interaktif ======
+st.subheader("🟣 Scatter Plot Explorer")
+
+num_cols = ["bill_length_mm", "bill_depth_mm", "flipper_length_mm", "body_mass_g"]
+
+x_axis = st.selectbox("Select X Axis", num_cols)
+y_axis = st.selectbox("Select Y Axis", num_cols, index=1)
+
+fig2, ax2 = plt.subplots()
+sns.scatterplot(
+    data=penguins,
+    x=x_axis,
+    y=y_axis,
+    hue="species_encoded",
+    palette="Set2"
+)
+st.pyplot(fig2)
+
+# ====== 3. Distribution Plot ======
+st.subheader("📦 Feature Distribution")
+
+feature = st.selectbox("Select Feature to View Distribution", num_cols)
+
+fig3, ax3 = plt.subplots()
+sns.histplot(penguins[feature], kde=True)
+st.pyplot(fig3)
+
+st.write("---")
+st.write("Built with Streamlit + Random Forest + Penguins Dataset 🐧")
